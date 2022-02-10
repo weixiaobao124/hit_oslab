@@ -94,7 +94,6 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
     
     //the same as father process
     long *krnstack;
-    p = (struct task_struct *) get_free_page();
     krnstack = (long)(PAGE_SIZE +(long)p);
      *(--krnstack) = ss & 0xffff;
      *(--krnstack) = esp;
@@ -114,7 +113,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
      *(--krnstack) = ebx;
      *(--krnstack) = 0;//eax，到最后作为fork()的返回值，即子进程的pid
      p->kernelstack = krnstack;
-    
+   /* 
 	p->tss.back_link = 0;
 	p->tss.esp0 = PAGE_SIZE + (long) p;
 	p->tss.ss0 = 0x10;
@@ -136,7 +135,7 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 	p->tss.gs = gs & 0xffff;
 	p->tss.ldt = _LDT(nr);
 	p->tss.trace_bitmap = 0x80000000;
-    
+    */
 
 	if (last_task_used_math == current)
 		__asm__("clts ; fnsave %0"::"m" (p->tss.i387));

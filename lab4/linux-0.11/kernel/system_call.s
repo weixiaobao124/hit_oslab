@@ -51,7 +51,7 @@ KERNEL_STACK = 12	#edit
 state	= 0		# these are offsets into the task-struct.
 counter	= 4
 priority = 8
-
+kernelstack = 12
 signal	= 16 #edit because insert kernerlstack
 sigaction = 20		# MUST be 16 (=len of sigaction)
 blocked = (37*16)
@@ -133,49 +133,54 @@ ret_from_sys_call:
 	iret  #ss esp eflag cs eip are pushed into stack by harewares when interrupts
 
 .align 2
+first_return_from_kernel:
+    popl %edx
+    popl %edi
+    popl %esi
+    pop %gs
+    pop %fs
+    pop %es
+    pop %ds
+    iret
+
 switch_to:
-	# 建立堆栈框架
-	pushl %ebp
-	movl %esp, %ebp
-	pushl %ecx
-	pushl %ebx
-	pushl %eax 
-	movl 8(%ebp), %ebx # 取出下一个进程的PCB指针pnext	ebx = pnext
-	cmpl %ebx, current # 和current指针作比较
-	je 1f
-	# 切换PCB
-	movl %ebx, %eax
-	xchgl %eax, current # eax=old_current, so current=pnext
-	# TSS中的内核栈指针的重写
-	 ## 虽然不再使用`ljmp TSS段选择子:不使用的段内偏移`进行任务切换，
-	 ## 但Intel的中断处理机制仍需要保持，因为CPU正是依靠这种机制在进行
-	 ## 中断切换时能够找到内核栈并将`SS:ESP, EFLAGS, CS:EPI`这5个寄存器
-	 ## 的值自动压入到内核栈，具体来说：在中断的时候依靠TR寄存器的值找到
-	 ## 当前进程的TSS(TSS用于保存硬件上下文，包括内核栈的地址SS0:EIP0)，
-	 ## 从TSS中找到内核栈的地址，将用户态下的这5个寄存器压到内核栈中，
-	 ## 这是沟通用户栈(用户态)和内核栈(内核态)的关键桥梁
-	movl tss, %ecx		# ecx = tss of pnext, it also the new current
-	addl $4096, %ebx	# ebx=the top of current kernel stack(pnext)
-	movl %ebx, 4(%ecx) # 将内核栈的栈顶写入到TSS中用于保存内核栈指针的ESP0
-	# 切换内核栈
-	movl %esp, KERNEL_STACK(%eax)
-	movl 8(%ebp), %ebx 	# 再取一下ebx，因为前面修改了ebx的值	ebx=current(pnext)
-	movl KERNEL_STACK(%ebx), %esp
-	# 切换LDT
-	movl 12(%ebp), %ecx
-	lldt %cx
-	# 切换完LDT之后重新取一下用于访问用户态的数据段寄存器FS的值，为了刷新FS寄存器的隐藏部分：段基地址和段限长
-	movl $0x17, %ecx
-	mov %cx, %fs
-	cmpl %eax, last_task_used_math	# 和后面的`clts`配合来处理协处理器
-	jne 1f
-	clts
-	# 拆除堆栈框架
-1:  popl %eax
-	popl %ebx
-	popl %ecx
-	popl %ebp
-	ret
+    pushl %ebp
+    movl %esp, %ebp
+    pushl %ecx
+    pushl %ebx
+    pushl %eax
+    movl 8(%ebp), %ebx
+    cmpl %ebx, current
+    je 1f
+
+    mov %ebx, %eax
+    xchgl %eax, current
+
+    movl tss, %ecx
+    addl $4096, %ebx
+    movl %ebx, ESP0(%ecx)
+    
+    movl %esp, KERNEL_STACK(%eax)
+    movl 8(%ebp), %ebx
+    movl KERNEL_STACK(%ebx), %esp
+
+    movl 12(%ebp) , %ecx
+    lldt %cx
+    movl $0x17, %ecx
+    mov %cx, %fs
+
+    movl $0x17, %ecx
+    mov %cx, %fs
+    cmpl %eax, last_task_used_math
+    jne 1f
+    clts
+
+1:	popl %eax
+    popl %ebx
+    popl %ecx
+    popl %ebp
+ret
+
 
 .align 2
 coprocessor_error:
@@ -267,17 +272,6 @@ sys_fork:
 	call copy_process
 	addl $20,%esp
 1:	ret
-
-first_return_from_kernel:
-	popl %edx
-	popl %edi
-	popl %esi
-	pop %gs
-	pop %fs
-	pop %es
-	pop %ds
-	# pushl $ret_from_sys_call
-	iret
 
 hd_interrupt:
 	pushl %eax
