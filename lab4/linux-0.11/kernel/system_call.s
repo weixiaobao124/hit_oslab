@@ -149,21 +149,29 @@ switch_to:
     pushl %ecx
     pushl %ebx
     pushl %eax
+#compare the current pcb and the pcb needed to change
+#if they are the same,swith_to is not neeeded
+#else change current->8(%ebp)
     movl 8(%ebp), %ebx
     cmpl %ebx, current
     je 1f
 
+#change pcb
     mov %ebx, %eax
     xchgl %eax, current
 
+#the information to record tss is in the bottom of the page
+#tss is in the top of the page
     movl tss, %ecx
     addl $4096, %ebx
     movl %ebx, ESP0(%ecx)
-    
+
+#change the kernel stack
     movl %esp, KERNEL_STACK(%eax)
     movl 8(%ebp), %ebx
     movl KERNEL_STACK(%ebx), %esp
 
+#change ldt
     movl 12(%ebp) , %ecx
     lldt %cx
     movl $0x17, %ecx
@@ -175,6 +183,7 @@ switch_to:
     jne 1f
     clts
 
+# popl at last <-> pushl at start
 1:	popl %eax
     popl %ebx
     popl %ecx

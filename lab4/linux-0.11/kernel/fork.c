@@ -67,6 +67,10 @@ int copy_mem(int nr,struct task_struct * p)
  * information (task[nr]) and sets up the necessary registers. It
  * also copies the data segment in it's entirety.
  */
+
+//because tss is not available
+//but copy_process use tss
+//so must edit this function
 int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 		long ebx,long ecx,long edx,
 		long fs,long es,long ds,
@@ -95,11 +99,15 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
     //the same as father process
     long *krnstack;
     krnstack = (long)(PAGE_SIZE +(long)p);
+    //iret pop them and move to user mode
      *(--krnstack) = ss & 0xffff;
      *(--krnstack) = esp;
-      *(--krnstack) = eflags;
+     *(--krnstack) = eflags;
      *(--krnstack) = cs & 0xffff;
      *(--krnstack) = eip;
+
+     //first_return_from_kernel use this and pop then
+     //the child process need these registers
      *(--krnstack) = ds & 0xffff;
      *(--krnstack) = es & 0xffff;
      *(--krnstack) = fs & 0xffff;
@@ -107,11 +115,15 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
      *(--krnstack) = esi;
      *(--krnstack) = edi;
      *(--krnstack) = edx;
+
+     //the end of swith_to use this and pop them
      *(--krnstack) = (long)first_return_from_kernel;
      *(--krnstack) = ebp;
      *(--krnstack) = ecx;
      *(--krnstack) = ebx;
      *(--krnstack) = 0;//eax，到最后作为fork()的返回值，即子进程的pid
+
+    //when switch_to this process,the first esp is here
      p->kernelstack = krnstack;
    /* 
 	p->tss.back_link = 0;
